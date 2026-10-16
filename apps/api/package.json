@@ -1,0 +1,43 @@
+{
+  "name": "@reachinbox/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/worker.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:worker": "node dist/worker.js",
+    "test:integration": "tsx src/scripts/integration-test.ts",
+    "smtp-probe": "tsx src/scripts/smtp-probe.ts",
+    "test:queue-recovery": "tsx src/scripts/test-queue-recovery.ts",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "verify": "tsx src/scripts/verify-connections.ts"
+  },
+  "dependencies": {
+    "@bull-board/api": "^6.7.10",
+    "@bull-board/express": "^6.7.10",
+    "@elastic/elasticsearch": "^8.15.1",
+    "@prisma/client": "^6.1.0",
+    "bullmq": "^5.34.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2",
+    "nodemailer": "^6.9.16",
+    "rate-limiter-flexible": "^5.0.4",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/nodemailer": "^6.4.17",
+    "@types/node": "^22.10.2",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

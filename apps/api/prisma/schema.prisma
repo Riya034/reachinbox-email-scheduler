@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailStatus {
+  SCHEDULED
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  name           String?
+  googleId       String?         @unique
+  slackId        String?         @unique
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  senderAccounts SenderAccount[]
+  campaigns      Campaign[]
+  emails         ScheduledEmail[]
+}
+
+model SenderAccount {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       String
+  fromEmail   String
+  smtpHost    String   @default("smtp.ethereal.email")
+  smtpPort    Int      @default(587)
+  smtpUser    String
+  smtpPass    String
+  hourlyLimit Int      @default(100)
+  minDelayMs  Int      @default(1000)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  campaigns   Campaign[]
+  emails      ScheduledEmail[]
+
+  @@index([userId])
+}
+
+model Campaign {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  senderAccountId String
+  senderAccount   SenderAccount  @relation(fields: [senderAccountId], references: [id], onDelete: Restrict)
+  name            String
+  status          CampaignStatus @default(ACTIVE)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  emails          ScheduledEmail[]
+
+  @@index([userId])
+  @@index([senderAccountId])
+}
+
+model ScheduledEmail {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId      String?
+  campaign        Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  senderAccountId String
+  senderAccount   SenderAccount @relation(fields: [senderAccountId], references: [id], onDelete: Restrict)
+  to              String
+  subject         String
+  body            String        @db.Text
+  scheduledAt     DateTime
+  sequenceOrder   Int           @default(0)
+  status          EmailStatus   @default(SCHEDULED)
+  sentAt          DateTime?
+  smtpMessageId   String?
+  errorMessage    String?
+  attemptCount    Int           @default(0)
+  bullJobId       String?
+  lastPostponedAt DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([campaignId])
+  @@index([senderAccountId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([campaignId, sequenceOrder])
+}
