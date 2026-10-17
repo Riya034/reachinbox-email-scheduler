@@ -2,57 +2,74 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { api } from "../api/client";
 
-const STORAGE_KEY = "reachinbox_dev_session";
-
-export type DevProfile = {
+export type UserProfile = {
+  id: string;
   name: string;
   email: string;
+  imageUrl: string | null;
 };
 
 type AuthContextValue = {
   isAuthenticated: boolean;
-  googleOAuthAvailable: false;
-  profile: DevProfile | null;
-  enterDevSession: (profile: DevProfile) => void;
-  signOut: () => void;
+  isLoading: boolean;
+  profile: UserProfile | null;
+  signInWithGoogle: () => void;
+  signOut: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<DevProfile | null>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as DevProfile) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const enterDevSession = useCallback((p: DevProfile) => {
-    setProfile(p);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+  const refreshSession = useCallback(async () => {
+    try {
+      const user = await api.me();
+      setProfile(user);
+    } catch {
+      setProfile(null);
+    }
   }, []);
 
-  const signOut = useCallback(() => {
-    setProfile(null);
-    localStorage.removeItem(STORAGE_KEY);
+  useEffect(() => {
+    void (async () => {
+      setIsLoading(true);
+      await refreshSession();
+      setIsLoading(false);
+    })();
+  }, [refreshSession]);
+
+  const signInWithGoogle = useCallback(() => {
+    window.location.href = "/api/auth/google";
+  }, []);
+
+  const signOut = useCallback(async () => {
+    try {
+      await api.logout();
+    } finally {
+      setProfile(null);
+    }
   }, []);
 
   const value = useMemo(
     () => ({
       isAuthenticated: profile !== null,
-      googleOAuthAvailable: false as const,
+      isLoading,
       profile,
-      enterDevSession,
+      signInWithGoogle,
       signOut,
+      refreshSession,
     }),
-    [profile, enterDevSession, signOut],
+    [profile, isLoading, signInWithGoogle, signOut, refreshSession],
   );
 
   return (

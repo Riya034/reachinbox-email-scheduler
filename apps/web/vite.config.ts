@@ -11,6 +11,16 @@ export default defineConfig({
         target: "http://localhost:3001",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            const cookies = proxyRes.headers["set-cookie"];
+            if (cookies) {
+              proxyRes.headers["set-cookie"] = cookies.map((cookie) =>
+                cookie.replace(/;\s*Secure/gi, ""),
+              );
+            }
+          });
+        },
       },
     },
   },

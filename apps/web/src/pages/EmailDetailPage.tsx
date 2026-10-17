@@ -150,6 +150,21 @@ export function EmailDetailPage() {
                 Delivery details
               </summary>
               <dl className="mt-3 space-y-2 text-xs text-muted">
+                <div>
+                  <dt className="font-medium text-slate-600">Scheduled for</dt>
+                  <dd>
+                    {formatDetailDate(email.scheduledAt)}
+                    <span className="mt-0.5 block text-[10px] text-muted">
+                      ({getTimezoneLabel()})
+                    </span>
+                  </dd>
+                </div>
+                {email.sentAt ? (
+                  <div>
+                    <dt className="font-medium text-slate-600">Sent at</dt>
+                    <dd>{formatDetailDate(email.sentAt)}</dd>
+                  </div>
+                ) : null}
                 {email.smtpMessageId ? (
                   <div>
                     <dt className="font-medium text-slate-600">SMTP message ID</dt>

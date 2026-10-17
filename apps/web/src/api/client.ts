@@ -18,11 +18,28 @@ export class HttpError extends Error {
   }
 }
 
+export type AuthUser = {
+  id: string;
+  email: string;
+  name: string;
+  imageUrl: string | null;
+};
+
+export type SlackConnectionStatus = {
+  connected: boolean;
+  teamName: string | null;
+  slackUserId: string | null;
+  scopes: string | null;
+  revoked: boolean;
+  error: string | null;
+};
+
 async function request<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
+    credentials: "include",
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -42,6 +59,16 @@ async function request<T>(
 
 export const api = {
   health: () => request<{ status: string }>("/health"),
+
+  me: () => request<AuthUser>("/auth/me"),
+
+  logout: () =>
+    request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+
+  slackStatus: () => request<SlackConnectionStatus>("/slack/status"),
+
+  slackDisconnect: () =>
+    request<SlackConnectionStatus>("/slack/disconnect", { method: "POST" }),
 
   listSenders: () =>
     request<{ data: SenderAccount[] }>("/sender-accounts"),
@@ -67,6 +94,14 @@ export const api = {
   listEmails: (status: "scheduled" | "sent" | "all") =>
     request<{ data: ScheduledEmail[] }>(
       `/emails?status=${status}`,
+    ),
+
+  searchEmails: (status: "scheduled" | "sent", q: string) =>
+    request<{
+      data: ScheduledEmail[];
+      meta?: { engine: string; hitCount: number; omittedStale: number };
+    }>(
+      `/emails/search?status=${status}&q=${encodeURIComponent(q)}`,
     ),
 
   getEmail: (id: string) =>

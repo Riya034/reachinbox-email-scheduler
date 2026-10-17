@@ -7,7 +7,14 @@ import { EmailDetailPage } from "./pages/EmailDetailPage";
 import { ComposePage } from "./pages/ComposePage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface text-sm text-muted">
+        Loading…
+      </div>
+    );
+  }
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }

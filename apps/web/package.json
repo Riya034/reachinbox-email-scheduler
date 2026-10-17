@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:dates": "node --import tsx --test src/utils/dates.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

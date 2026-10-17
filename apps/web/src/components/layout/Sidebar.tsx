@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { Clock3, Plus, Send } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { SlackConnectionCard } from "./SlackConnectionCard";
 
 export function Sidebar({
   scheduledCount,
@@ -27,12 +28,21 @@ export function Sidebar({
 
       {profile ? (
         <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-border px-2.5 py-2">
-          <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700"
-            aria-hidden
-          >
-            {profile.name.charAt(0).toUpperCase()}
-          </div>
+          {profile.imageUrl ? (
+            <img
+              src={profile.imageUrl}
+              alt=""
+              className="h-9 w-9 shrink-0 rounded-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700"
+              aria-hidden
+            >
+              {profile.name.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold leading-tight">{profile.name}</p>
             <p className="truncate text-[11px] text-muted">{profile.email}</p>
@@ -70,15 +80,10 @@ export function Sidebar({
       </nav>
 
       <div className="mt-auto space-y-3 border-t border-border pt-4 md:pt-5">
-        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2.5 py-2">
-          <p className="text-[11px] font-medium text-slate-700">Slack</p>
-          <p className="text-[11px] leading-snug text-muted">
-            Not connected — OAuth API not implemented
-          </p>
-        </div>
+        <SlackConnectionCard />
         <button
           type="button"
-          onClick={signOut}
+          onClick={() => void signOut()}
           className="px-2 text-left text-[11px] text-muted hover:text-slate-800"
         >
           Sign out
