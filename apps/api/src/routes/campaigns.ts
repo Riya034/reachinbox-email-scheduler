@@ -7,10 +7,11 @@ const createSchema = z.object({
   senderAccountId: z.string().min(1),
 });
 
-export function campaignsRouter(devUserId: string): Router {
+export function campaignsRouter(): Router {
   const router = Router();
 
   router.post("/", async (req, res) => {
+    const userId = req.userId!;
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
@@ -18,7 +19,7 @@ export function campaignsRouter(devUserId: string): Router {
     }
 
     const sender = await prisma.senderAccount.findFirst({
-      where: { id: parsed.data.senderAccountId, userId: devUserId, isActive: true },
+      where: { id: parsed.data.senderAccountId, userId, isActive: true },
     });
     if (!sender) {
       res.status(400).json({ error: "Sender account not found" });
@@ -27,7 +28,7 @@ export function campaignsRouter(devUserId: string): Router {
 
     const campaign = await prisma.campaign.create({
       data: {
-        userId: devUserId,
+        userId,
         senderAccountId: parsed.data.senderAccountId,
         name: parsed.data.name,
       },
@@ -36,9 +37,9 @@ export function campaignsRouter(devUserId: string): Router {
     res.status(201).json(campaign);
   });
 
-  router.get("/", async (_req, res) => {
+  router.get("/", async (req, res) => {
     const campaigns = await prisma.campaign.findMany({
-      where: { userId: devUserId },
+      where: { userId: req.userId! },
       include: {
         senderAccount: {
           select: { id: true, label: true, fromEmail: true },
@@ -51,7 +52,7 @@ export function campaignsRouter(devUserId: string): Router {
 
   router.get("/:id", async (req, res) => {
     const campaign = await prisma.campaign.findFirst({
-      where: { id: req.params.id, userId: devUserId },
+      where: { id: req.params.id, userId: req.userId! },
       include: {
         senderAccount: {
           select: { id: true, label: true, fromEmail: true },

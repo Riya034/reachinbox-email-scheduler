@@ -1,8 +1,14 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import type { SenderAccount } from "@prisma/client";
+import type { Env } from "../config/env.js";
+import { resolveSenderForTransport } from "../services/sender-credential.service.js";
 
 const transporterCache = new Map<string, Transporter>();
+
+function cacheKey(account: SenderAccount): string {
+  return `${account.id}:${account.smtpPass.length}`;
+}
 
 export async function createEtherealSenderCredentials(): Promise<{
   smtpUser: string;
@@ -18,7 +24,8 @@ export async function createEtherealSenderCredentials(): Promise<{
 }
 
 function getTransporter(account: SenderAccount): Transporter {
-  const cached = transporterCache.get(account.id);
+  const key = cacheKey(account);
+  const cached = transporterCache.get(key);
   if (cached) {
     return cached;
   }
@@ -36,17 +43,19 @@ function getTransporter(account: SenderAccount): Transporter {
     socketTimeout: 60_000,
   });
 
-  transporterCache.set(account.id, transporter);
+  transporterCache.set(key, transporter);
   return transporter;
 }
 
 export async function sendViaSenderAccount(
   account: SenderAccount,
+  env: Env,
   params: { to: string; subject: string; body: string },
 ): Promise<{ messageId: string; previewUrl?: string }> {
-  const transporter = getTransporter(account);
+  const transportAccount = resolveSenderForTransport(account, env);
+  const transporter = getTransporter(transportAccount);
   const info = await transporter.sendMail({
-    from: account.fromEmail,
+    from: transportAccount.fromEmail,
     to: params.to,
     subject: params.subject,
     text: params.body,
@@ -58,7 +67,11 @@ export async function sendViaSenderAccount(
   return { messageId: info.messageId, previewUrl };
 }
 
-export async function verifySenderAccount(account: SenderAccount): Promise<void> {
-  const transporter = getTransporter(account);
+export async function verifySenderAccount(
+  account: SenderAccount,
+  env: Env,
+): Promise<void> {
+  const transportAccount = resolveSenderForTransport(account, env);
+  const transporter = getTransporter(transportAccount);
   await transporter.verify();
 }

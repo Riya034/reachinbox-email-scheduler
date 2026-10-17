@@ -6,10 +6,11 @@ import type { Env } from "../config/env.js";
 import { sendViaSenderAccount } from "../lib/mailer.js";
 import { prisma } from "../lib/prisma.js";
 import { tryAcquireSenderSendSlot } from "../lib/sender-rate-limit.js";
+import { scheduleSlackRateLimitNotification } from "../services/slack-rate-limit-notify.service.js";
 import { EMAIL_QUEUE_NAME } from "../queues/email.queue.js";
 import type { EmailJobData } from "../queues/email.types.js";
 import { campaignHasEarlierPending } from "../services/email-scheduler.service.js";
-import { indexScheduledEmail } from "../services/email-index.service.js";
+import { indexScheduledEmailSafe } from "../services/email-index.service.js";
 async function postponeJob(
   job: Job<EmailJobData>,
   token: string,
@@ -25,7 +26,7 @@ async function postponeJob(
     },
   });
   const updated = await prisma.scheduledEmail.findUniqueOrThrow({ where: { id: emailId } });
-  await indexScheduledEmail(elasticsearch, updated);
+  await indexScheduledEmailSafe(elasticsearch, updated);
 
   await job.moveToDelayed(Date.now() + retryAfterMs, token);
   throw new DelayedError(`postponed ${retryAfterMs}ms`);
@@ -77,7 +78,6 @@ export function startEmailWorker(
         },
         data: {
           status: EmailStatus.SENDING,
-          attemptCount: { increment: 1 },
         },
       });
 
@@ -100,6 +100,18 @@ export function startEmailWorker(
       );
 
       if (!slot.acquired) {
+        scheduleSlackRateLimitNotification({
+          env,
+          redis: rateLimitRedis,
+          userId: email.userId,
+          emailId,
+          senderLabel: email.senderAccount.label,
+          fromEmail: email.senderAccount.fromEmail,
+          to: email.to,
+          subject: email.subject,
+          reason: slot.reason,
+          retryAfterMs: slot.retryAfterMs,
+        });
         await prisma.scheduledEmail.update({
           where: { id: emailId },
           data: { status: EmailStatus.QUEUED },
@@ -112,8 +124,13 @@ export function startEmailWorker(
         include: { senderAccount: true },
       });
 
+      await prisma.scheduledEmail.update({
+        where: { id: emailId },
+        data: { attemptCount: { increment: 1 } },
+      });
+
       try {
-        const result = await sendViaSenderAccount(fresh.senderAccount, {
+        const result = await sendViaSenderAccount(fresh.senderAccount, env, {
           to: fresh.to,
           subject: fresh.subject,
           body: fresh.body,
@@ -129,7 +146,7 @@ export function startEmailWorker(
             bullJobId: null,
           },
         });
-        await indexScheduledEmail(elasticsearch, sent);
+        await indexScheduledEmailSafe(elasticsearch, sent);
 
         if (result.previewUrl) {
           console.log(`[worker] ${emailId} sent — preview: ${result.previewUrl}`);
@@ -148,7 +165,7 @@ export function startEmailWorker(
             errorMessage: message,
           },
         });
-        await indexScheduledEmail(elasticsearch, updated);
+        await indexScheduledEmailSafe(elasticsearch, updated);
         throw err;
       }
     },

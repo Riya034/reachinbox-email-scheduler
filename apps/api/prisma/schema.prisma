@@ -27,6 +27,7 @@ model User {
   id             String          @id @default(cuid())
   email          String          @unique
   name           String?
+  imageUrl       String?
   googleId       String?         @unique
   slackId        String?         @unique
   createdAt      DateTime        @default(now())
@@ -34,6 +35,23 @@ model User {
   senderAccounts SenderAccount[]
   campaigns      Campaign[]
   emails         ScheduledEmail[]
+  slackConnection SlackConnection?
+}
+
+model SlackConnection {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slackUserId          String
+  slackTeamId          String
+  teamName             String
+  encryptedAccessToken String    @db.Text
+  scopes               String
+  revokedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([slackTeamId])
 }
 
 model SenderAccount {
@@ -102,4 +120,5 @@ model ScheduledEmail {
   @@index([scheduledAt])
   @@index([status])
   @@index([campaignId, sequenceOrder])
+  @@index([userId, status, scheduledAt])
 }

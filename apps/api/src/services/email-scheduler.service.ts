@@ -3,13 +3,15 @@ import type { Client } from "@elastic/elasticsearch";
 import { EmailStatus, type ScheduledEmail } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { emailJobId, type EmailJobData } from "../queues/email.types.js";
-import { indexScheduledEmail } from "./email-index.service.js";
+import { indexScheduledEmailSafe } from "./email-index.service.js";
 
 const RECONCILE_STATUSES: EmailStatus[] = [
   EmailStatus.SCHEDULED,
   EmailStatus.QUEUED,
   EmailStatus.SENDING,
 ];
+
+const ENQUEUE_FAILURE_PREFIX = "Failed to enqueue send job:";
 
 export function computeDelayMs(scheduledAt: Date): number {
   return Math.max(0, scheduledAt.getTime() - Date.now());
@@ -59,7 +61,7 @@ export async function enqueueEmailJob(
     });
   }
 
-  await indexScheduledEmail(elasticsearch, record);
+  await indexScheduledEmailSafe(elasticsearch, record);
   return record;
 }
 
@@ -105,7 +107,19 @@ export async function scheduleEmail(params: {
     },
   });
 
-  return enqueueEmailJob(params.queue, params.elasticsearch, email);
+  try {
+    return await enqueueEmailJob(params.queue, params.elasticsearch, email);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await prisma.scheduledEmail.update({
+      where: { id: email.id },
+      data: {
+        status: EmailStatus.FAILED,
+        errorMessage: `Failed to enqueue send job: ${message}`,
+      },
+    });
+    throw err;
+  }
 }
 
 export async function cancelScheduledEmail(
@@ -134,8 +148,60 @@ export async function cancelScheduledEmail(
     where: { id: emailId },
     data: { status: EmailStatus.CANCELLED, bullJobId: null },
   });
-  await indexScheduledEmail(elasticsearch, updated);
+  await indexScheduledEmailSafe(elasticsearch, updated);
   return updated;
+}
+
+async function healSendingWithoutSmtpProof(
+  queue: Queue<EmailJobData>,
+  elasticsearch: Client,
+  email: ScheduledEmail,
+): Promise<boolean> {
+  if (email.status !== EmailStatus.SENDING || email.smtpMessageId) {
+    return false;
+  }
+
+  const job = await queue.getJob(emailJobId(email.id));
+  const state = job ? await job.getState() : null;
+
+  if (job && state === "completed") {
+    const rv = job.returnvalue as { messageId?: string } | undefined;
+    if (rv?.messageId) {
+      await prisma.scheduledEmail.update({
+        where: { id: email.id },
+        data: {
+          status: EmailStatus.SENT,
+          sentAt: new Date(),
+          smtpMessageId: rv.messageId,
+          errorMessage: null,
+          bullJobId: null,
+        },
+      });
+      const healed = await prisma.scheduledEmail.findUniqueOrThrow({
+        where: { id: email.id },
+      });
+      await indexScheduledEmailSafe(elasticsearch, healed);
+      return true;
+    }
+  }
+
+  if (job && (state === "active" || state === "waiting" || state === "delayed")) {
+    return false;
+  }
+
+  await prisma.scheduledEmail.updateMany({
+    where: {
+      id: email.id,
+      status: EmailStatus.SENDING,
+      smtpMessageId: null,
+    },
+    data: { status: EmailStatus.QUEUED },
+  });
+  const refreshed = await prisma.scheduledEmail.findUniqueOrThrow({
+    where: { id: email.id },
+  });
+  await enqueueEmailJob(queue, elasticsearch, refreshed);
+  return true;
 }
 
 export async function reconcilePendingEmails(
@@ -143,12 +209,50 @@ export async function reconcilePendingEmails(
   elasticsearch: Client,
 ): Promise<number> {
   const pending = await prisma.scheduledEmail.findMany({
-    where: { status: { in: RECONCILE_STATUSES } },
+    where: {
+      OR: [
+        { status: { in: RECONCILE_STATUSES } },
+        {
+          status: EmailStatus.FAILED,
+          smtpMessageId: null,
+          errorMessage: { startsWith: ENQUEUE_FAILURE_PREFIX },
+        },
+      ],
+    },
     orderBy: [{ scheduledAt: "asc" }, { sequenceOrder: "asc" }],
   });
 
   let restored = 0;
   for (const email of pending) {
+    if (email.status === EmailStatus.FAILED) {
+      const reset = await prisma.scheduledEmail.updateMany({
+        where: {
+          id: email.id,
+          status: EmailStatus.FAILED,
+          smtpMessageId: null,
+          errorMessage: { startsWith: ENQUEUE_FAILURE_PREFIX },
+        },
+        data: {
+          status: EmailStatus.SCHEDULED,
+          errorMessage: null,
+        },
+      });
+      if (reset.count === 0) {
+        continue;
+      }
+      const refreshed = await prisma.scheduledEmail.findUniqueOrThrow({
+        where: { id: email.id },
+      });
+      await enqueueEmailJob(queue, elasticsearch, refreshed);
+      restored += 1;
+      continue;
+    }
+
+    if (await healSendingWithoutSmtpProof(queue, elasticsearch, email)) {
+      restored += 1;
+      continue;
+    }
+
     const job = await queue.getJob(emailJobId(email.id));
     if (!job) {
       await enqueueEmailJob(queue, elasticsearch, email);

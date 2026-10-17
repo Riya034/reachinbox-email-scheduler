@@ -18,14 +18,14 @@ local count = tonumber(redis.call('GET', hourlyKey) or '0')
 if count >= hourlyLimit then
   local ttl = redis.call('TTL', hourlyKey)
   if ttl < 0 then ttl = hourTtl end
-  return {0, ttl * 1000}
+  return {0, ttl * 1000, 1}
 end
 
 local last = tonumber(redis.call('GET', lastSendKey) or '0')
 if last > 0 then
   local wait = minDelayMs - (nowMs - last)
   if wait > 0 then
-    return {0, wait}
+    return {0, wait, 2}
   end
 end
 
@@ -34,12 +34,14 @@ if redis.call('TTL', hourlyKey) < 0 then
   redis.call('EXPIRE', hourlyKey, hourTtl)
 end
 redis.call('SET', lastSendKey, nowMs)
-return {1, 0}
+return {1, 0, 0}
 `;
+
+export type RateLimitReason = "hourly_limit" | "min_delay";
 
 export type SendSlotResult =
   | { acquired: true }
-  | { acquired: false; retryAfterMs: number };
+  | { acquired: false; retryAfterMs: number; reason: RateLimitReason };
 
 function hourBucketKey(senderAccountId: string, at: Date): string {
   const bucket = Math.floor(at.getTime() / (HOUR_SECONDS * 1000));
@@ -66,13 +68,18 @@ export async function tryAcquireSenderSendSlot(
     minDelayMs,
     now.getTime(),
     HOUR_SECONDS,
-  )) as [number, number];
+  )) as [number, number, number];
 
-  const [acquired, retryAfterMs] = result;
+  const [acquired, retryAfterMs, reasonCode] = result;
   if (acquired === 1) {
     return { acquired: true };
   }
-  return { acquired: false, retryAfterMs: Math.max(50, Math.ceil(retryAfterMs)) };
+  const reason: RateLimitReason = reasonCode === 1 ? "hourly_limit" : "min_delay";
+  return {
+    acquired: false,
+    retryAfterMs: Math.max(50, Math.ceil(retryAfterMs)),
+    reason,
+  };
 }
 
 /** Test helper: clear sender rate-limit keys */

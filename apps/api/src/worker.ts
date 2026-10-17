@@ -1,10 +1,13 @@
-import { loadEnv } from "./config/env.js";
+import { loadEnv, logOAuthConfigHints } from "./config/env.js";
+import { assertProductionSafeConfig } from "./config/production-guards.js";
 import { createRuntime, closeRuntime } from "./lib/runtime.js";
 import { createBullMqConnection } from "./lib/redis.js";
 import { startEmailWorker } from "./workers/email.worker.js";
 
 async function main(): Promise<void> {
   const env = loadEnv();
+  assertProductionSafeConfig(env);
+  logOAuthConfigHints(env);
   const ctx = await createRuntime(env);
 
   const workerConnection = createBullMqConnection(env);

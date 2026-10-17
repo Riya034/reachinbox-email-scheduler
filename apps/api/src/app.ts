@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
@@ -8,10 +9,14 @@ import type { Redis } from "ioredis";
 import type { Queue } from "bullmq";
 import type { Env } from "./config/env.js";
 import { createRateLimitMiddleware } from "./middleware/rate-limit.js";
+import { createRequireAuthMiddleware } from "./middleware/require-auth.js";
+import { requestIdMiddleware } from "./middleware/request-id.js";
+import { authRouter } from "./routes/auth.js";
 import { campaignsRouter } from "./routes/campaigns.js";
 import { emailsRouter } from "./routes/emails.js";
 import { healthRouter } from "./routes/health.js";
 import { senderAccountsRouter } from "./routes/sender-accounts.js";
+import { slackCallbackRouter, slackRouter } from "./routes/slack.js";
 import type { EmailJobData } from "./queues/email.types.js";
 
 export function createApp(
@@ -19,8 +24,7 @@ export function createApp(
   redis: Redis,
   elasticsearch: Client,
   emailQueue: Queue<EmailJobData>,
-  devUserId: string,
-  defaultSenderAccountId: string,
+  integrationTestUserId: string,
 ): express.Application {
   const app = express();
 
@@ -30,8 +34,12 @@ export function createApp(
       credentials: true,
     }),
   );
-  app.use(express.json());
+  app.use(requestIdMiddleware);
+  app.use(cookieParser());
+  app.use(express.json({ limit: "256kb" }));
   app.use(createRateLimitMiddleware(redis, env));
+
+  const requireAuth = createRequireAuthMiddleware(env, integrationTestUserId);
 
   app.get("/", (_req, res) => {
     res.json({
@@ -39,6 +47,7 @@ export function createApp(
       version: "0.1.0",
       docs: {
         health: "/health",
+        auth: "/auth/google",
         emails: "/emails",
         senderAccounts: "/sender-accounts",
         campaigns: "/campaigns",
@@ -48,12 +57,13 @@ export function createApp(
   });
 
   app.use("/health", healthRouter(redis, elasticsearch));
-  app.use("/sender-accounts", senderAccountsRouter(devUserId, env));
-  app.use("/campaigns", campaignsRouter(devUserId));
-  app.use(
-    "/emails",
-    emailsRouter(emailQueue, elasticsearch, devUserId, defaultSenderAccountId),
-  );
+  app.use("/auth", authRouter(env, redis));
+  app.use("/auth/slack", slackCallbackRouter(env, redis));
+
+  app.use("/slack", requireAuth, slackRouter(env, redis));
+  app.use("/sender-accounts", requireAuth, senderAccountsRouter(env));
+  app.use("/campaigns", requireAuth, campaignsRouter());
+  app.use("/emails", requireAuth, emailsRouter(emailQueue, elasticsearch, env));
 
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath(env.BULL_BOARD_PATH);
@@ -61,7 +71,11 @@ export function createApp(
     queues: [new BullMQAdapter(emailQueue)],
     serverAdapter,
   });
-  app.use(env.BULL_BOARD_PATH, serverAdapter.getRouter());
+  if (env.BULL_BOARD_REQUIRE_AUTH) {
+    app.use(env.BULL_BOARD_PATH, requireAuth, serverAdapter.getRouter());
+  } else {
+    app.use(env.BULL_BOARD_PATH, serverAdapter.getRouter());
+  }
 
   return app;
 }

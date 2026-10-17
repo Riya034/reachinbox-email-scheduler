@@ -15,6 +15,14 @@ import { resetSenderRateLimits } from "../lib/sender-rate-limit.js";
 const env = loadEnv();
 const API = env.API_URL;
 const RUN_ID = Date.now();
+const TEST_AUTH_SECRET = env.INTEGRATION_TEST_AUTH_SECRET;
+
+if (!TEST_AUTH_SECRET) {
+  console.error(
+    "INTEGRATION_TEST_AUTH_SECRET is required in .env for integration tests (see .env.example).",
+  );
+  process.exit(1);
+}
 
 /** Max time to wait for all emails in a delivery phase */
 const DELIVERY_PHASE_TIMEOUT_MS = 90_000;
@@ -31,6 +39,7 @@ async function api<T = Json>(
     ...init,
     headers: {
       "Content-Type": "application/json",
+      "X-Integration-Test-Auth": TEST_AUTH_SECRET,
       ...(init?.headers ?? {}),
     },
   });

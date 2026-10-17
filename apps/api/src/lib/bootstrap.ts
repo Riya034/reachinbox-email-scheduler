@@ -1,6 +1,7 @@
 import type { Env } from "../config/env.js";
 import { prisma } from "./prisma.js";
 import { createEtherealSenderCredentials } from "./mailer.js";
+import { prepareSmtpPassForStorage } from "../services/sender-credential.service.js";
 
 export async function ensureDevSchedulerUser(email: string): Promise<string> {
   const user = await prisma.user.upsert({
@@ -31,9 +32,15 @@ export async function ensureDefaultSenderForUser(
     smtpUser = creds.smtpUser;
     smtpPass = creds.smtpPass;
     fromEmail = creds.fromEmail;
-    console.log("[bootstrap] Created default Ethereal sender:");
-    console.log(`  ETHEREAL_USER=${smtpUser}`);
-    console.log(`  ETHEREAL_PASS=${smtpPass}`);
+    if (env.NODE_ENV === "development") {
+      console.log("[bootstrap] Created default Ethereal sender:");
+      console.log(`  ETHEREAL_USER=${smtpUser}`);
+      console.log(`  ETHEREAL_PASS=${smtpPass}`);
+    } else {
+      console.log(
+        "[bootstrap] Created default Ethereal sender (credentials stored in Postgres only)",
+      );
+    }
   }
 
   const sender = await prisma.senderAccount.create({
@@ -44,7 +51,7 @@ export async function ensureDefaultSenderForUser(
       smtpHost: env.SMTP_HOST,
       smtpPort: env.SMTP_PORT,
       smtpUser,
-      smtpPass,
+      smtpPass: prepareSmtpPassForStorage(smtpPass, env),
       hourlyLimit: env.SENDER_DEFAULT_HOURLY_LIMIT,
       minDelayMs: env.SENDER_DEFAULT_MIN_DELAY_MS,
     },

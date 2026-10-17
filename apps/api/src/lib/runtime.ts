@@ -8,6 +8,7 @@ import { createBullMqConnection, createRedisConnection } from "./redis.js";
 import { createEmailQueue } from "../queues/email.queue.js";
 import type { EmailJobData } from "../queues/email.types.js";
 import { reconcilePendingEmails } from "../services/email-scheduler.service.js";
+import { assertProductionSenderCredentialsEncrypted } from "../services/sender-credential.service.js";
 
 export type RuntimeContext = {
   env: Env;
@@ -39,6 +40,8 @@ export async function createRuntime(env: Env): Promise<RuntimeContext> {
 
   const elasticsearch = createElasticsearchClient(env);
   await ensureEmailsIndex(elasticsearch);
+
+  await assertProductionSenderCredentialsEncrypted(env);
 
   const emailQueue = createEmailQueue(queueConnection);
   const devUserId = await ensureDevSchedulerUser(env.DEV_SCHEDULER_USER_EMAIL);

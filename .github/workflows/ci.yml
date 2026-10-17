@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: reachinbox
+          POSTGRES_PASSWORD: reachinbox_secret
+          POSTGRES_DB: reachinbox
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reachinbox"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+
+    env:
+      DATABASE_URL: postgresql://reachinbox:reachinbox_secret@localhost:5432/reachinbox?schema=public
+      REDIS_URL: redis://localhost:6379
+      ELASTICSEARCH_URL: http://localhost:9200
+      SESSION_SECRET: ci-session-secret-minimum-32-characters-long
+      TOKEN_ENCRYPTION_KEY: ci-token-encryption-key-minimum-32-characters
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run db:push -w @reachinbox/api
+      - run: npm run build -w @reachinbox/api
+      - run: npm run build -w @reachinbox/web
+      - run: npm run test:production-guards -w @reachinbox/api
+      - run: npm run test:schedule-enqueue -w @reachinbox/api
+      - run: npm run test:smtp-credentials -w @reachinbox/api
+      - run: npm run test:reconcile-recovery -w @reachinbox/api
+      - run: npm run test:rate-limit-concurrency -w @reachinbox/api
+      - run: npm run test:restart-recovery -w @reachinbox/api
+      - run: npm run test:elasticsearch -w @reachinbox/api
+      - run: npm run test:slack -w @reachinbox/api
+      - run: npm run test:auth-isolation -w @reachinbox/api
+      - run: npm run test:queue-recovery -w @reachinbox/api
+      - run: npm run test:dates -w @reachinbox/web

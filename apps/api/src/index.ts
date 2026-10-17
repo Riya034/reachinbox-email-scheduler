@@ -1,9 +1,13 @@
-import { loadEnv } from "./config/env.js";
+import { loadEnv, logEnvSourcesOnce, logOAuthConfigHints } from "./config/env.js";
+import { assertProductionSafeConfig } from "./config/production-guards.js";
 import { createApp } from "./app.js";
 import { createRuntime, closeRuntime } from "./lib/runtime.js";
 
 async function main(): Promise<void> {
   const env = loadEnv();
+  assertProductionSafeConfig(env);
+  logEnvSourcesOnce(env);
+  logOAuthConfigHints(env);
   const ctx = await createRuntime(env);
 
   const app = createApp(
@@ -12,7 +16,6 @@ async function main(): Promise<void> {
     ctx.elasticsearch,
     ctx.emailQueue,
     ctx.devUserId,
-    ctx.defaultSenderAccountId,
   );
 
   const server = app.listen(env.API_PORT, () => {
