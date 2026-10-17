@@ -28,6 +28,10 @@ export function createApp(
 ): express.Application {
   const app = express();
 
+  if (env.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+  }
+
   app.use(
     cors({
       origin: env.WEB_URL,

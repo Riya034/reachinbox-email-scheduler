@@ -1,0 +1,43 @@
+# Dependencies and build outputs
+node_modules
+**/node_modules
+dist
+**/dist
+apps/web/dist
+apps/api/dist
+*.tsbuildinfo
+
+# Secrets and local env (never bake into images)
+.env
+.env.*
+!.env.example
+!.env.production.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
+credentials.json
+secrets.json
+*.pem
+*.key
+
+# VCS and IDE
+.git
+.github
+.idea
+.vscode
+
+# Logs, coverage, local data
+logs
+*.log
+coverage
+.esdata
+**/*.db
+**/*.db-journal
+**/*.sql
+**/*.dump
+**/*.bak
+
+# Docs not needed in runtime images
+docs
+README.md

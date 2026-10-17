@@ -1,0 +1,47 @@
+# Multi-stage API + worker image (same artifact, different CMD in compose.prod.yml)
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+
+RUN npm ci
+
+COPY tsconfig.base.json ./
+COPY apps/api apps/api
+
+RUN npm run db:generate -w @reachinbox/api \
+  && npm run build -w @reachinbox/api
+
+FROM node:20-bookworm-slim AS runtime
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+
+RUN npm ci --omit=dev -w @reachinbox/api \
+  && npm install prisma@6.1.0 --no-save -w @reachinbox/api
+
+COPY --from=build /app/apps/api/dist /app/apps/api/dist
+COPY apps/api/prisma /app/apps/api/prisma
+COPY deploy/api-entrypoint.sh /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh \
+  && npm run db:generate -w @reachinbox/api
+
+WORKDIR /app/apps/api
+
+EXPOSE 3001
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["node", "dist/index.js"]

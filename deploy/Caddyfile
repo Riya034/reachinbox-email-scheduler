@@ -1,0 +1,32 @@
+# Replace PUBLIC_HOSTNAME via compose (e.g. app.example.com).
+# Caddy obtains and renews TLS certificates automatically on ports 80/443.
+
+{
+	email {$CADDY_ADMIN_EMAIL}
+}
+
+{$PUBLIC_HOSTNAME} {
+	encode gzip
+
+	# OAuth callbacks (not under /api prefix on Express)
+	handle /auth/* {
+		reverse_proxy api:3001
+	}
+
+	# Bull Board (session auth enforced by API in production)
+	handle /admin/queues* {
+		reverse_proxy api:3001
+	}
+
+	# Same semantics as Vite dev proxy: strip /api before upstream
+	handle_path /api/* {
+		reverse_proxy api:3001
+	}
+
+	# React SPA — refresh-safe fallback
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

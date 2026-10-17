@@ -1,0 +1,178 @@
+# Production stack for Hetzner (or any VPS). Local dev uses docker-compose.yml unchanged.
+# Usage: docker compose -f compose.prod.yml --env-file .env.production up -d --build
+#
+# Public ports: 80 and 443 on `caddy` only. All other services are internal.
+
+name: reachinbox-prod
+
+services:
+  caddy:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.caddy
+    container_name: reachinbox-prod-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME}
+      CADDY_ADMIN_EMAIL: ${CADDY_ADMIN_EMAIL}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - edge
+
+  api:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+    container_name: reachinbox-prod-api
+    restart: unless-stopped
+    environment:
+      RUN_DB_PUSH: "true"
+    env_file:
+      - ${ENV_FILE:-.env.production}
+    expose:
+      - "3001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+
+  worker:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+    container_name: reachinbox-prod-worker
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      RUN_DB_PUSH: "false"
+    env_file:
+      - ${ENV_FILE:-.env.production}
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'dist/worker.js' || exit 1",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - internal
+    # Scale intentionally: one worker replica avoids duplicate BullMQ consumers unless you know the limits.
+
+  postgres:
+    platform: linux/amd64
+    image: postgres:16-alpine
+    container_name: reachinbox-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reachinbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-reachinbox}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-reachinbox} -d ${POSTGRES_DB:-reachinbox}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  redis:
+    platform: linux/amd64
+    image: redis:7-alpine
+    container_name: reachinbox-prod-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal
+
+  elasticsearch:
+    platform: linux/amd64
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: reachinbox-prod-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.name=reachinbox-prod
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    networks:
+      - internal
+
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  caddy_data:
+  caddy_config:

@@ -266,6 +266,10 @@ npm run test:multi-worker -w @reachinbox/api
 - **Redis:** ephemeral queue state; Postgres is source of truth — reconcile on worker start.
 - **Elasticsearch:** reindex via `npm run backfill:elasticsearch -w @reachinbox/api` after restore.
 
+## Production deployment (Hetzner + Docker + Caddy)
+
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for VPS setup, `compose.prod.yml`, HTTPS, OAuth redirect URLs, and reviewer test checklist. Local `docker-compose.yml` is unchanged for development.
+
 ## License
 
 Private — assignment project.

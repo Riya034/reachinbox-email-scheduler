@@ -1,0 +1,20 @@
+# Builds the Vite SPA and serves it behind Caddy with automatic HTTPS (compose.prod.yml).
+FROM node:20-bookworm-slim AS web-build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/package.json
+COPY apps/api/package.json apps/api/package.json
+
+RUN npm ci
+
+COPY tsconfig.base.json ./
+COPY apps/web apps/web
+
+RUN npm run build -w @reachinbox/web
+
+FROM caddy:2.8-alpine
+
+COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY --from=web-build /app/apps/web/dist /srv
