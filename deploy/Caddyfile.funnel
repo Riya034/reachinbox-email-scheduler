@@ -1,0 +1,39 @@
+# Tailscale Funnel: TLS terminates at Tailscale; Caddy serves plain HTTP on :8080 only.
+# Bind on all interfaces inside the container; compose maps host 127.0.0.1:8080 -> 8080.
+
+{
+	auto_https off
+}
+
+:8080 {
+	encode gzip
+
+	# OAuth callbacks (Express paths are not under /api)
+	handle /auth/* {
+		reverse_proxy api:3001 {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {http.request.header.Host}
+		}
+	}
+
+	handle /admin/queues* {
+		reverse_proxy api:3001 {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {http.request.header.Host}
+		}
+	}
+
+	# Same semantics as Vite dev proxy: strip /api before upstream
+	handle_path /api/* {
+		reverse_proxy api:3001 {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {http.request.header.Host}
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

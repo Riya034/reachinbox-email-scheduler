@@ -117,20 +117,36 @@ export function slackCallbackRouter(env: Env, redis: Redis): Router {
         return;
       }
 
-      await upsertSlackConnection({
-        userId,
-        slackUserId: token.authed_user.id,
-        slackTeamId: token.team.id,
-        teamName: token.team.name ?? "Slack workspace",
-        accessToken: token.access_token,
-        scopes: token.scope ?? "",
-        env,
-      });
+      const slackUserId = token.authed_user.id;
 
-      await prisma.user.update({
-        where: { id: userId },
-        data: { slackId: token.authed_user.id },
+      const linkedElsewhere = await prisma.user.findFirst({
+        where: { slackId: slackUserId, id: { not: userId } },
+        select: { id: true },
       });
+      if (linkedElsewhere) {
+        fail("slack_already_linked");
+        return;
+      }
+
+      try {
+        await upsertSlackConnection({
+          userId,
+          slackUserId,
+          slackTeamId: token.team.id,
+          teamName: token.team.name ?? "Slack workspace",
+          accessToken: token.access_token,
+          scopes: token.scope ?? "",
+          env,
+        });
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: { slackId: slackUserId },
+        });
+      } catch (linkErr) {
+        await disconnectSlackForUser(userId);
+        throw linkErr;
+      }
 
       settingsUrl.searchParams.set("slack_connected", "1");
       res.redirect(settingsUrl.toString());

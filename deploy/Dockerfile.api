@@ -36,7 +36,11 @@ COPY --from=build /app/apps/api/dist /app/apps/api/dist
 COPY apps/api/prisma /app/apps/api/prisma
 COPY deploy/api-entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh \
+# Windows checkouts may introduce CRLF; breaks shebang with "exec ... no such file or directory".
+RUN sed -i 's/\r$//' /entrypoint.sh \
+  && chmod +x /entrypoint.sh \
+  && test -x /entrypoint.sh \
+  && head -n 1 /entrypoint.sh | grep -q '^#!/bin/sh$' \
   && npm run db:generate -w @reachinbox/api
 
 WORKDIR /app/apps/api

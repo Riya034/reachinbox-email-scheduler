@@ -2,6 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type SlackConnectionStatus } from "../../api/client";
 import { Button } from "../ui/Button";
 
+const SLACK_ERROR_MESSAGES: Record<string, string> = {
+  access_denied: "Slack authorization was cancelled.",
+  slack_already_linked:
+    "This Slack login is already linked to another Google account in ReachInbox. Disconnect it there, or sign in with a different Slack user.",
+  oauth_failed:
+    "Slack connection could not be completed. If you still see Connected below, use Reconnect or Disconnect.",
+};
+
 export function SlackConnectionCard() {
   const [status, setStatus] = useState<SlackConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,9 +45,8 @@ export function SlackConnectionCard() {
     const slackErr = params.get("slack_error");
     if (slackErr) {
       setActionError(
-        slackErr === "access_denied"
-          ? "Slack authorization was cancelled."
-          : `Slack connection failed (${slackErr}).`,
+        SLACK_ERROR_MESSAGES[slackErr] ??
+          `Slack connection failed (${slackErr}).`,
       );
       params.delete("slack_error");
       const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;

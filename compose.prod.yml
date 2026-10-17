@@ -94,8 +94,10 @@ services:
       retries: 3
       start_period: 45s
     networks:
+      - edge
       - internal
     # Scale intentionally: one worker replica avoids duplicate BullMQ consumers unless you know the limits.
+    # `edge` is required for outbound SMTP/DNS; data stores stay off the public internet (no host ports).
 
   postgres:
     platform: linux/amd64

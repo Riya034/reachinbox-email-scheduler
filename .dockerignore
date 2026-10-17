@@ -12,10 +12,12 @@ apps/api/dist
 .env.*
 !.env.example
 !.env.production.example
+!.env.funnel.example
 **/.env
 **/.env.*
 !**/.env.example
 !**/.env.production.example
+!**/.env.funnel.example
 credentials.json
 secrets.json
 *.pem

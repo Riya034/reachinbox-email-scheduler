@@ -94,7 +94,10 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   ETHEREAL_USER: trimmedOptional,
   ETHEREAL_PASS: trimmedOptional,
-  SMTP_FROM: z.string().email().optional(),
+  SMTP_FROM: z.preprocess(
+    (val) => (typeof val === "string" && val.trim() === "" ? undefined : val),
+    z.string().email().optional(),
+  ),
   DEV_SCHEDULER_USER_EMAIL: z.string().email().default("scheduler@reachinbox.local"),
   SENDER_DEFAULT_HOURLY_LIMIT: z.coerce.number().int().positive().default(100),
   SENDER_DEFAULT_MIN_DELAY_MS: z.coerce.number().int().nonnegative().default(1000),

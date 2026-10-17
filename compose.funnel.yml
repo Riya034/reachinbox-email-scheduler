@@ -1,0 +1,169 @@
+# Isolated production-like stack for Tailscale Funnel (separate DB/Redis/ES volumes from dev).
+# Public access: only via `tailscale funnel 8080` -> 127.0.0.1:8080 (Caddy). No host DB ports.
+#
+#   docker compose -f compose.funnel.yml --env-file .env.funnel up -d --build
+
+name: reachinbox-funnel
+
+services:
+  caddy:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.caddy.funnel
+    container_name: reachinbox-funnel-caddy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - edge
+
+  api:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+    container_name: reachinbox-funnel-api
+    restart: unless-stopped
+    environment:
+      RUN_DB_PUSH: "true"
+    env_file:
+      - ${ENV_FILE:-.env.funnel}
+    expose:
+      - "3001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+
+  worker:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+    container_name: reachinbox-funnel-worker
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      RUN_DB_PUSH: "false"
+    env_file:
+      - ${ENV_FILE:-.env.funnel}
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'dist/worker.js' || exit 1",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - edge
+      - internal
+
+  postgres:
+    platform: linux/amd64
+    image: postgres:16-alpine
+    container_name: reachinbox-funnel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reachinbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-reachinbox_funnel}
+    volumes:
+      - funnel_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-reachinbox} -d ${POSTGRES_DB:-reachinbox_funnel}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  redis:
+    platform: linux/amd64
+    image: redis:7-alpine
+    container_name: reachinbox-funnel-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - funnel_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal
+
+  elasticsearch:
+    platform: linux/amd64
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: reachinbox-funnel-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.name=reachinbox-funnel
+    volumes:
+      - funnel_elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    networks:
+      - internal
+
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  funnel_postgres_data:
+  funnel_redis_data:
+  funnel_elasticsearch_data:
