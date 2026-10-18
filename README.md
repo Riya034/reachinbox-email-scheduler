@@ -25,6 +25,46 @@ The live URL is served via **Tailscale Funnel** from a **Windows 11** laptop run
 
 ---
 
+
+## Application screenshots
+
+The screenshots below showcase the email scheduling workflow. Ethereal SMTP is used for testing; messages marked SENT are accepted by the test SMTP service, not delivered to real recipients' inboxes.
+
+### 1. Google Sign-In
+
+![Google Sign-In](docs/screenshots/login.png)
+
+### 2. Main Dashboard
+
+![ReachInbox Dashboard](docs/screenshots/dashboard.png)
+
+### 3. Compose and Schedule Email
+
+![Compose and Schedule](docs/screenshots/compose-schedule.png)
+
+### 4. Schedule Email
+
+![Schedule Email](docs/screenshots/schedule.png)
+
+### 5. Send Later
+
+![Send Later](docs/screenshots/send-later.png)
+
+### 6. Sent Emails
+
+![Sent Emails](docs/screenshots/sent.png)
+
+### 7. Elasticsearch Email Search
+
+![Elasticsearch Search](docs/screenshots/elastic-search.png)
+
+### 8. Slack Rate-Limit Notification
+
+![Slack Notification](docs/screenshots/slack-notification.png)
+
+---
+
+
 ## Technology stack
 
 | Layer | Technology |
