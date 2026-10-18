@@ -6,7 +6,7 @@ A full-stack email scheduling application built for the **Outbox Labs Software D
 |---|---|
 | **Live application** | https://desktop-brji3fs.tailafe9e2.ts.net |
 | **GitHub** | https://github.com/Riya034/reachinbox-email-scheduler |
-| **Demo video** | [Demo video — link to be added] |
+| **Demo video** | https://www.loom.com/share/c7d73862687940828923cb0201ef79f1 |
 
 The live URL is served via **Tailscale Funnel** from a **Windows 11** laptop running **Docker Desktop**. Public HTTPS is available only while that machine, Docker, and Tailscale Funnel remain online. This is **not** 24/7 cloud hosting, a custom domain, or an SLA-backed deployment.
 
@@ -453,7 +453,7 @@ GitHub Actions runs build and unit tests (see `.github/workflows/ci.yml`); integ
 |----------|-----|
 | Live app | https://desktop-brji3fs.tailafe9e2.ts.net |
 | Source code | https://github.com/Riya034/reachinbox-email-scheduler |
-| Demo video | [Demo video — link to be added] |
+| Demo video | Demo video — https://www.loom.com/share/c7d73862687940828923cb0201ef79f1   |
 | VPS deployment guide | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | Funnel deployment guide | [docs/TAILSCALE-FUNNEL.md](docs/TAILSCALE-FUNNEL.md) |
 
